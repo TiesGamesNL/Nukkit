@@ -169,6 +169,7 @@ public class MainLogger extends ThreadedLogger {
                 logFile.createNewFile();
             } catch (IOException e) {
                 this.logException(e);
+            }
         }
         replacements.put(TextFormat.BLACK, Ansi.ansi().a(Ansi.Attribute.RESET).fg(Ansi.Color.BLACK).boldOff().toString());
         replacements.put(TextFormat.DARK_BLUE, Ansi.ansi().a(Ansi.Attribute.RESET).fg(Ansi.Color.BLUE).boldOff().toString());
