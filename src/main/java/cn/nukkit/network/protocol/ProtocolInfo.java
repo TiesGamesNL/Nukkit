@@ -11,8 +11,8 @@ public interface ProtocolInfo {
      */
     byte CURRENT_PROTOCOL = Integer.valueOf("113").byteValue(); //plugins can change it
 
-    String MINECRAFT_VERSION = "v1.1.3";
-    String MINECRAFT_VERSION_NETWORK = "1.1.3";
+    String MINECRAFT_VERSION = "v1.1.5";
+    String MINECRAFT_VERSION_NETWORK = "1.1.5";
 
     byte LOGIN_PACKET = 0x01;
     byte PLAY_STATUS_PACKET = 0x02;
