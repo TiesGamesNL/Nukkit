@@ -1,5 +1,6 @@
 package cn.nukkit;
 
+import cn.nukkit.AdventureSettings.Type;
 import cn.nukkit.block.*;
 import cn.nukkit.blockentity.BlockEntity;
 import cn.nukkit.blockentity.BlockEntityItemFrame;
@@ -332,24 +333,24 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     @Deprecated
     public void setAllowFlight(boolean value) {
-        this.getAdventureSettings().setCanFly(value);
+        this.getAdventureSettings().set(Type.ALLOW_FLIGHT, value);
         this.getAdventureSettings().update();
     }
 
     @Deprecated
     public boolean getAllowFlight() {
-        return this.getAdventureSettings().canFly();
+        return this.getAdventureSettings().get(Type.ALLOW_FLIGHT);
     }
 
     @Deprecated
     public void setAutoJump(boolean value) {
-        this.getAdventureSettings().setAutoJump(value);
+        this.getAdventureSettings().set(Type.AUTO_JUMP, value);
         this.getAdventureSettings().update();
     }
 
     @Deprecated
     public boolean hasAutoJump() {
-        return this.getAdventureSettings().isAutoJumpEnabled();
+        return this.getAdventureSettings().get(Type.AUTO_JUMP);
     }
 
     @Override
@@ -1151,10 +1152,11 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         if (newSettings == null) {
             newSettings = this.getAdventureSettings().clone(this);
-            newSettings.setCanDestroyBlock(gamemode != 3);
-            newSettings.setCanFly((gamemode & 0x01) > 0);
-            newSettings.setNoclip(gamemode == 0x03);
-            newSettings.setFlying(gamemode == 0x03);
+            newSettings.set(Type.WORLD_IMMUTABLE, gamemode != 3);
+            newSettings.set(Type.BUILD_AND_MINE, gamemode != 3);
+            newSettings.set(Type.ALLOW_FLIGHT, (gamemode & 0x01) > 0);
+            newSettings.set(Type.NO_CLIP, gamemode == 0x03);
+            newSettings.set(Type.FLYING, gamemode == 0x03);
         }
 
         PlayerGameModeChangeEvent ev;
@@ -1185,7 +1187,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         this.setAdventureSettings(ev.getNewAdventureSettings());
 
         if (this.isSpectator()) {
-            this.getAdventureSettings().setFlying(true);
+            this.getAdventureSettings().set(Type.FLYING, true);
             this.teleport(this.temporalVector.setComponents(this.x, this.y + 0.1, this.z));
 
             InventoryContentPacket inventoryContentPacket = new InventoryContentPacket();
@@ -1193,7 +1195,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             this.dataPacket(inventoryContentPacket);
         } else {
             if (this.isSurvival()) {
-                this.getAdventureSettings().setFlying(false);
+                this.getAdventureSettings().set(Type.FLYING, false);
             }
             InventoryContentPacket inventoryContentPacket = new InventoryContentPacket();
             inventoryContentPacket.inventoryId = InventoryContentPacket.SPECIAL_CREATIVE;
@@ -1596,7 +1598,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     this.inAirTicks = 0;
                     this.highestPosition = this.y;
                 } else {
-                    if (!this.isGliding() && !server.getAllowFlight() && !this.getAdventureSettings().canFly() && this.inAirTicks > 10 && !this.isSleeping() && !this.isImmobile()) {
+                    if (!this.isGliding() && !server.getAllowFlight() && !this.getAdventureSettings().get(Type.ALLOW_FLIGHT) && this.inAirTicks > 10 && !this.isSleeping() && !this.isImmobile()) {
                         double expectedVelocity = (-this.getGravity()) / ((double) this.getDrag()) - ((-this.getGravity()) / ((double) this.getDrag())) * Math.exp(-((double) this.getDrag()) * ((double) (this.inAirTicks - this.startAirTicks)));
                         double diff = (this.speed.y - expectedVelocity) * (this.speed.y - expectedVelocity);
 
@@ -1803,12 +1805,11 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             nbt.putInt("playerGameType", this.gamemode);
         }
 
-        this.adventureSettings = new AdventureSettings.Builder(this)
-                .canDestroyBlock(!isAdventure())
-                .autoJump(true)
-                .canFly(isCreative())
-                .noclip(isSpectator())
-                .build();
+        this.adventureSettings = new AdventureSettings(this)
+                .set(Type.WORLD_IMMUTABLE, !isAdventure())
+                .set(Type.AUTO_JUMP, true)
+                .set(Type.ALLOW_FLIGHT, isCreative())
+                .set(Type.NO_CLIP, isSpectator());
 
         Level level;
         if ((level = this.server.getLevelByName(nbt.getString("Level"))) == null || !alive) {
@@ -2160,7 +2161,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 case ProtocolInfo.ADVENTURE_SETTINGS_PACKET:
                     //TODO: player abilities, check for other changes
                     AdventureSettingsPacket adventureSettingsPacket = (AdventureSettingsPacket) packet;
-                    if (adventureSettingsPacket.getFlag(AdventureSettingsPacket.ALLOW_FLIGHT) && !this.getAdventureSettings().canFly()) {
+                    if (adventureSettingsPacket.getFlag(AdventureSettingsPacket.ALLOW_FLIGHT) && !this.getAdventureSettings().get(Type.ALLOW_FLIGHT)) {
                         this.kick(PlayerKickEvent.Reason.FLYING_DISABLED, "Flying is not enabled on this server");
                         break;
                     }
@@ -2169,7 +2170,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     if (playerToggleFlightEvent.isCancelled()) {
                         this.getAdventureSettings().update();
                     } else {
-                        this.getAdventureSettings().setFlying(playerToggleFlightEvent.isFlying());
+                        this.getAdventureSettings().set(Type.FLYING, playerToggleFlightEvent.isFlying());
                     }
                     break;
                 case ProtocolInfo.MOB_EQUIPMENT_PACKET:
@@ -2572,21 +2573,10 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         break;
                     }
 
-                    this.craftingType = CRAFTING_SMALL;
-                    this.resetCraftingGridType();
                     TextPacket textPacket = (TextPacket) packet;
 
                     if (textPacket.type == TextPacket.TYPE_CHAT) {
-                        textPacket.message = this.removeFormat ? TextFormat.clean(textPacket.message) : textPacket.message;
-                        for (String msg : textPacket.message.split("\n")) {
-                            if (!"".equals(msg.trim()) && msg.length() <= 255 && this.messageCounter-- > 0) {
-                                PlayerChatEvent chatEvent = new PlayerChatEvent(this, msg);
-                                this.server.getPluginManager().callEvent(chatEvent);
-                                if (!chatEvent.isCancelled()) {
-                                    this.server.broadcastMessage(this.getServer().getLanguage().translateString(chatEvent.getFormat(), new String[]{chatEvent.getPlayer().getDisplayName(), chatEvent.getMessage()}), chatEvent.getRecipients());
-                                }
-                            }
-                        }
+                        this.chat(textPacket.message);
                     }
                     break;
                 case ProtocolInfo.CONTAINER_CLOSE_PACKET:
@@ -2954,17 +2944,17 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         int[] used = new int[this.inventory.getSize()];
 
                         for (Item ingredient : ingredients) {
-                            inventorySlot = -1;
+                            slot = -1;
                             for (int index : this.inventory.getContents().keySet()) {
                                 Item i = this.inventory.getContents().get(index);
                                 if (ingredient.getId() != 0 && ingredient.deepEquals(i, ingredient.hasMeta()) && (i.getCount() - used[index]) >= 1) {
-                                    inventorySlot = index;
+                                    slot = index;
                                     used[index]++;
                                     break;
                                 }
                             }
 
-                            if (ingredient.getId() != 0 && inventorySlot == -1) {
+                            if (ingredient.getId() != 0 && slot == -1) {
                                 canCraft = false;
                                 break;
                             }
@@ -3048,6 +3038,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                                 break;
                         }
                     }
+
                     break;
                 case ProtocolInfo.BLOCK_ENTITY_DATA_PACKET:
                     if (!this.spawned || !this.isAlive()) {
@@ -3366,10 +3357,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         case InventoryTransactionPacket.TYPE_USE_ITEM_ON_ENTITY:
                             UseItemOnEntityData useItemOnEntityData = (UseItemOnEntityData) transactionPacket.transactionData;
 
-                            if (useItemOnEntityData.entityRuntimeId % 2 == 0) {
-                                useItemOnEntityData.entityRuntimeId /= 2; //wtf is that
-                            }
-
                             Entity target = this.level.getEntity(useItemOnEntityData.entityRuntimeId);
                             if (target == null) {
                                 return;
@@ -3545,6 +3532,35 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     break;
             }
         }
+    }
+
+    /**
+     * Sends a chat message as this player. If the message begins with a / (forward-slash) it will be treated
+     * as a command.
+     */
+    public boolean chat(String message) {
+        if (!this.spawned || !this.isAlive()) {
+            return false;
+        }
+
+        this.resetCraftingGridType();
+        this.craftingType = CRAFTING_SMALL;
+
+        if (this.removeFormat) {
+            message = TextFormat.clean(message);
+        }
+
+        for (String msg : message.split("\n")) {
+            if (!"".equals(msg.trim()) && msg.length() <= 255 && this.messageCounter-- > 0) {
+                PlayerChatEvent chatEvent = new PlayerChatEvent(this, msg);
+                this.server.getPluginManager().callEvent(chatEvent);
+                if (!chatEvent.isCancelled()) {
+                    this.server.broadcastMessage(this.getServer().getLanguage().translateString(chatEvent.getFormat(), new String[]{chatEvent.getPlayer().getDisplayName(), chatEvent.getMessage()}), chatEvent.getRecipients());
+                }
+            }
+        }
+
+        return true;
     }
 
     public boolean kick() {
@@ -4160,7 +4176,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 ) {
             //source.setCancelled();
             return false;
-        } else if (this.getAdventureSettings().canFly() && source.getCause() == DamageCause.FALL) {
+        } else if (this.getAdventureSettings().get(Type.ALLOW_FLIGHT) && source.getCause() == DamageCause.FALL) {
             //source.setCancelled();
             return false;
         } else if (source.getCause() == DamageCause.FALL) {

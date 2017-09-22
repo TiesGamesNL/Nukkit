@@ -1,5 +1,7 @@
 package cn.nukkit.math;
 
+import java.util.Locale;
+
 import static java.lang.Math.PI;
 
 /**
@@ -55,7 +57,7 @@ public final class Angle implements Comparable<Angle> {
         } else {
             if (isDegree) return floatValue * (float) PI / 180.0f;
             else return floatValue;
-        }
+    }
     }
 
     public double asDoubleRadian() {
@@ -65,7 +67,7 @@ public final class Angle implements Comparable<Angle> {
         } else {
             if (isDegree) return floatValue * PI / 180.0;
             else return floatValue;
-        }
+    }
     }
 
     public float asFloatDegree() {
@@ -75,7 +77,7 @@ public final class Angle implements Comparable<Angle> {
         } else {
             if (isDegree) return floatValue;
             else return floatValue * 180.0f / (float) PI;
-        }
+    }
     }
 
     public double asDoubleDegree() {
@@ -85,7 +87,7 @@ public final class Angle implements Comparable<Angle> {
         } else {
             if (isDegree) return floatValue;
             else return floatValue * 180.0 / PI;
-        }
+    }
     }
 
     public static int compare(Angle a, Angle b) {
@@ -96,7 +98,8 @@ public final class Angle implements Comparable<Angle> {
 
     @Override
     public String toString() {
-        return String.format("Angle[%s, %f%s = %f%s] [%d]",
+        return String.format(Locale.ROOT,
+                "Angle[%s, %f%s = %f%s] [%d]",
                 isOriginDouble ? "Double" : "Float",
                 isOriginDouble ? doubleValue : floatValue,
                 isDegree ? "deg" : "rad",
