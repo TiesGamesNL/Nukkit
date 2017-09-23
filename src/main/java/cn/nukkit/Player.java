@@ -816,7 +816,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         this.sendData(this);
         this.inventory.sendContents(this);
         this.inventory.sendHotbarContents();
-        this.inventory.sendArmorContents(this);       
+        this.inventory.sendArmorContents(this);
 
         SetTimePacket setTimePacket = new SetTimePacket();
         setTimePacket.time = this.level.getTime();
