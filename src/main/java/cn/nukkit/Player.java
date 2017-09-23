@@ -818,6 +818,15 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         this.inventory.sendContents(this);
         this.inventory.sendHotbarContents();
         this.inventory.sendArmorContents(this);
+        
+        //Send creative inventory
+        if (this.getGamemode() == 1) {
+            ContainerSetContentPacket containerSetContentPacket = new ContainerSetContentPacket();
+            containerSetContentPacket.windowid = ContainerSetContentPacket.SPECIAL_CREATIVE;
+            containerSetContentPacket.eid = this.id;
+            containerSetContentPacket.slots = Item.getCreativeItems().stream().toArray(Item[]::new);
+            this.dataPacket(containerSetContentPacket);
+        }        
 
         SetTimePacket setTimePacket = new SetTimePacket();
         setTimePacket.time = this.level.getTime();
