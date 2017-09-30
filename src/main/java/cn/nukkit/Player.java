@@ -33,6 +33,7 @@ import cn.nukkit.inventory.*;
 import cn.nukkit.inventory.transaction.InventoryTransaction;
 import cn.nukkit.inventory.transaction.SimpleInventoryTransaction;
 import cn.nukkit.inventory.transaction.action.InventoryAction;
+import cn.nukkit.inventory.transaction.action.SlotChangeAction;
 import cn.nukkit.inventory.transaction.data.ReleaseItemData;
 import cn.nukkit.inventory.transaction.data.UseItemData;
 import cn.nukkit.inventory.transaction.data.UseItemOnEntityData;
@@ -2407,7 +2408,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         getServer().getPluginManager().callEvent(event);
 
                         //Set back new settings if not been cancelled
-                        if (!event.isCancelled() && window instanceof FormWindowCustom) ((FormWindowCustom) window).setElementsFromResponse();
+                        if (!event.isCancelled() && window instanceof FormWindowCustom)
+                            ((FormWindowCustom) window).setElementsFromResponse();
                     }
 
                     break;
@@ -2553,6 +2555,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     }
                     this.craftingType = CRAFTING_SMALL;
                     this.resetCraftingGridType();
+
                     if (this.windowIndex.containsKey(containerClosePacket.windowId)) {
                         this.server.getPluginManager().callEvent(new InventoryCloseEvent(this.windowIndex.get(containerClosePacket.windowId), this));
                         this.removeWindow(this.windowIndex.get(containerClosePacket.windowId));
@@ -2570,37 +2573,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
                     Recipe recipe = this.server.getCraftingManager().getRecipe(craftingEventPacket.id);
 
-                    if (this.craftingType == CRAFTING_ANVIL) {
-                        Inventory inv = this.windowIndex.get(craftingEventPacket.windowId);
-                        AnvilInventory anvilInventory = inv instanceof AnvilInventory ? (AnvilInventory) inv : null;
-
-                        if (anvilInventory == null) {
-                            anvilInventory = null;
-
-                            for (Inventory window : this.windowIndex.values()) {
-                                if (window instanceof AnvilInventory) {
-                                    anvilInventory = (AnvilInventory) window;
-                                    break;
-                                }
-                            }
-
-                            if (anvilInventory == null) { //If it'sf _still_ null, then the player doesn't have a valid anvil window, cannot proceed.
-                                this.getServer().getLogger().debug("Couldn't find an anvil window for " + this.getName() + ", exiting");
-                                this.inventory.sendContents(this);
-                                break;
-                            }
-                        }
-
-                        if (recipe == null) {
-                            //Item renamed
-
-                            if (!anvilInventory.onRename(this, craftingEventPacket.output[0])) {
-                                this.getServer().getLogger().debug(this.getName() + " failed to rename an item in an anvil");
-                                this.inventory.sendContents(this);
-                            }
-                        }
-                        break;
-                    } else if (!this.windowIndex.containsKey(craftingEventPacket.windowId)) {
+                    if (!this.windowIndex.containsKey(craftingEventPacket.windowId)) {
                         this.inventory.sendContents(this);
                         containerClosePacket = new ContainerClosePacket();
                         containerClosePacket.windowId = craftingEventPacket.windowId;
@@ -2608,7 +2581,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         break;
                     }
 
-                    if ((recipe == null) || (((recipe instanceof BigShapelessRecipe) || (recipe instanceof BigShapedRecipe)) && this.craftingType == CRAFTING_SMALL)) {
+                    if (recipe == null || (((recipe instanceof BigShapelessRecipe) || (recipe instanceof BigShapedRecipe)) && this.craftingType == CRAFTING_SMALL)) {
                         this.inventory.sendContents(this);
                         break;
                     }
@@ -2626,382 +2599,103 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
                     boolean canCraft = true;
 
-                    if (craftingEventPacket.input.length == 0) {
-                        Recipe[] recipes = getServer().getCraftingManager().getRecipesByResult(craftingEventPacket.output[0]);
+                    ArrayList<Item> ingredientz = new ArrayList<>();
 
-                        if (recipes == null || recipes.length == 0) {
-                            this.getServer().getLogger().debug("Uknown recipe for output (" + craftingEventPacket.output[0] + ")");
-                            return;
-                        }
+                    if (recipe instanceof ShapedRecipe) {
 
-                        recipe = null;
-
-                        ArrayList<Item> ingredientz = new ArrayList<>();
-
-                        recipeloop:
-                        for (Recipe rec : recipes) {
-                            ingredientz.clear();
-
-                            if (rec instanceof ShapedRecipe) {
-                                Map<Integer, Map<Integer, Item>> ingredients = ((ShapedRecipe) rec).getIngredientMap();
-                                for (Map<Integer, Item> map : ingredients.values()) {
-                                    for (Item ingredient : map.values()) {
-                                        if (ingredient != null && ingredient.getId() != Item.AIR) {
-                                            ingredientz.add(ingredient);
-                                        }
-                                    }
-                                }
-                            } else if (rec instanceof ShapelessRecipe) {
-                                ShapelessRecipe recipe0 = (ShapelessRecipe) rec;
-
-                                for (Item ingredient : recipe0.getIngredientList()) {
-                                    if (ingredient != null && ingredient.getId() != Item.AIR) {
-                                        ingredientz.add(ingredient);
-                                    }
-                                }
-                            }
-
-                            Map<String, Item> serialized = new HashMap<>();
-
-                            for (Item ingredient : ingredientz) {
-                                String hash = ingredient.getId() + ":" + ingredient.getDamage();
-                                Item r = serialized.get(hash);
-
-                                if (r != null) {
-                                    r.count += ingredient.getCount();
-                                    continue;
-                                }
-
-                                serialized.put(hash, ingredient);
-                            }
-
-                            for (Item ingredient : serialized.values()) {
-                                if (!this.inventory.contains(ingredient)) {
-                                    continue recipeloop;
-                                }
-                            }
-
-                            recipe = rec;
-
-                            CraftItemEvent craftItemEvent = new CraftItemEvent(this, serialized.values().stream().toArray(Item[]::new), recipe);
-                            getServer().getPluginManager().callEvent(craftItemEvent);
-
-                            if (craftItemEvent.isCancelled()) {
-                                this.inventory.sendContents(this);
-                                break packetswitch;
-                            }
-
-                            for (Item ingredient : serialized.values()) {
-                                this.inventory.removeItem(ingredient);
-                            }
-
-                            this.inventory.addItem(recipe.getResult());
-                            break;
-                        }
-
-                        if (recipe == null) {
-                            this.server.getLogger().debug("(1) Unmatched desktop recipe " + craftingEventPacket.id + " from player " + this.getName());
-                            this.inventory.sendContents(this);
-                        }
-                    } else {
-                        ArrayList<Item> ingredientz = new ArrayList<>();
-
-                        if (recipe instanceof ShapedRecipe) {
-
-                            Map<Integer, Map<Integer, Item>> ingredients = ((ShapedRecipe) recipe).getIngredientMap();
-                            for (Map<Integer, Item> map : ingredients.values()) {
-                                for (Item ingredient : map.values()) {
-                                    if (ingredient != null && ingredient.getId() != Item.AIR) {
-                                        ingredientz.add(ingredient);
-                                    }
-                                }
-                            }
-                        } else if (recipe instanceof ShapelessRecipe) {
-                            ShapelessRecipe recipe0 = (ShapelessRecipe) recipe;
-
-                            for (Item ingredient : recipe0.getIngredientList()) {
+                        Map<Integer, Map<Integer, Item>> ingredients = ((ShapedRecipe) recipe).getIngredientMap();
+                        for (Map<Integer, Item> map : ingredients.values()) {
+                            for (Item ingredient : map.values()) {
                                 if (ingredient != null && ingredient.getId() != Item.AIR) {
                                     ingredientz.add(ingredient);
                                 }
                             }
                         }
+                    } else if (recipe instanceof ShapelessRecipe) {
+                        ShapelessRecipe recipe0 = (ShapelessRecipe) recipe;
 
-                        Map<String, Item> serialized = new HashMap<>();
-
-                        for (Item ingredient : ingredientz) {
-                            String hash = ingredient.getId() + ":" + ingredient.getDamage();
-                            Item r = serialized.get(hash);
-
-                            if (r != null) {
-                                r.count += ingredient.getCount();
-                                continue;
-                            }
-
-                            serialized.put(hash, ingredient);
-                        }
-
-                        for (Item ingredient : serialized.values()) {
-                            if (!this.inventory.contains(ingredient)) {
-                                canCraft = false;
-                                break;
+                        for (Item ingredient : recipe0.getIngredientList()) {
+                            if (ingredient != null && ingredient.getId() != Item.AIR) {
+                                ingredientz.add(ingredient);
                             }
                         }
-
-                        if (!canCraft) {
-                            this.server.getLogger().debug("(1) Unmatched recipe " + craftingEventPacket.id + " from player " + this.getName() + "  not anough ingredients");
-                            return;
-                        }
-
-                        CraftItemEvent craftItemEvent = new CraftItemEvent(this, serialized.values().stream().toArray(Item[]::new), recipe);
-                        getServer().getPluginManager().callEvent(craftItemEvent);
-
-                        if (craftItemEvent.isCancelled()) {
-                            this.inventory.sendContents(this);
-                            break;
-                        }
-
-                        for (Item ingredient : serialized.values()) {
-                            this.inventory.removeItem(ingredient);
-                        }
-
-                        this.inventory.addItem(recipe.getResult());
-
-                        /*if (recipe instanceof ShapedRecipe) {
-                            int offsetX = 0;
-                            int offsetY = 0;
-
-                            if (this.craftingType == CRAFTING_BIG) {
-                                int minX = -1, minY = -1, maxX = 0, maxY = 0;
-                                for (int x = 0; x < 3 && canCraft; ++x) {
-                                    for (int y = 0; y < 3; ++y) {
-                                        Item readItem = craftingEventPacket.input[y * 3 + x];
-                                        if (readItem.getId() != Item.AIR) {
-                                            if (minY == -1 || minY > y) {
-                                                minY = y;
-                                            }
-                                            if (maxY < y) {
-                                                maxY = y;
-                                            }
-                                            if (minX == -1) {
-                                                minX = x;
-                                            }
-                                            if (maxX < x) {
-                                                maxX = x;
-                                            }
-                                        }
-                                    }
-                                }
-                                if (maxX == minX) {
-                                    offsetX = minX;
-                                }
-                                if (maxY == minY) {
-                                    offsetY = minY;
-                                }
-                            }
-
-                            //To fix some items can't craft
-                            for (int x = 0; x < 3 - offsetX && canCraft; ++x) {
-                                for (int y = 0; y < 3 - offsetY; ++y) {
-                                    item = craftingEventPacket.input[(y + offsetY) * 3 + (x + offsetX)];
-                                    Item ingredient = ((ShapedRecipe) recipe).getIngredient(x, y);
-                                    //todo: check this https://github.com/PocketMine/PocketMine-MP/commit/58709293cf4eee2e836a94226bbba4aca0f53908
-                                    if (item.getCount() > 0) {
-                                        if (ingredient == null || !ingredient.deepEquals(item, ingredient.hasMeta(), ingredient.getCompoundTag() != null)) {
-                                            canCraft = false;
-                                            break;
-                                        }
-
-                                    }
-                                }
-                            }
-
-                            //If can't craft by auto resize, will try to craft this item in another way
-                            if (!canCraft) {
-                                canCraft = true;
-                                for (int x = 0; x < 3 && canCraft; ++x) {
-                                    for (int y = 0; y < 3; ++y) {
-                                        item = craftingEventPacket.input[y * 3 + x];
-                                        Item ingredient = ((ShapedRecipe) recipe).getIngredient(x, y);
-                                        if (item.getCount() > 0) {
-                                            if (ingredient == null || !ingredient.deepEquals(item, ingredient.hasMeta(), ingredient.getCompoundTag() != null)) {
-                                                canCraft = false;
-                                                break;
-                                            }
-
-                                        }
-                                    }
-                                }
-                            }
-
-                        } else if (recipe instanceof ShapelessRecipe) {
-                            List<Item> needed = ((ShapelessRecipe) recipe).getIngredientList();
-
-                            for (int x = 0; x < 3 && canCraft; ++x) {
-                                for (int y = 0; y < 3; ++y) {
-                                    item = craftingEventPacket.input[y * 3 + x].clone();
-
-                                    for (Item n : new ArrayList<>(needed)) {
-                                        if (n.deepEquals(item, n.hasMeta(), n.getCompoundTag() != null)) {
-                                            int remove = Math.min(n.getCount(), item.getCount());
-                                            n.setCount(n.getCount() - remove);
-                                            item.setCount(item.getCount() - remove);
-
-                                            if (n.getCount() == 0) {
-                                                needed.remove(n);
-                                            }
-                                        }
-                                    }
-
-                                    if (item.getCount() > 0) {
-                                        canCraft = false;
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (!needed.isEmpty()) {
-                                canCraft = false;
-                            }
-                        } else {
-                            canCraft = false;
-                        }
-
-                        List<Item> ingredientsList = new ArrayList<>();
-                        if (recipe instanceof ShapedRecipe) {
-                            for (int x = 0; x < 3; x++) {
-                                for (int y = 0; y < 3; y++) {
-                                    Item need = ((ShapedRecipe) recipe).getIngredient(x, y);
-                                    if (need.getId() == 0) {
-                                        continue;
-                                    }
-                                    for (int count = need.getCount(); count > 0; count--) {
-                                        Item needAdd = need.clone();
-                                        //todo: check if there need to set item's count to 1, I'm too tired to check that today =w=
-                                        needAdd.setCount(1);
-                                        ingredientsList.add(needAdd);
-                                    }
-                                }
-                            }
-                        }
-                        if (recipe instanceof ShapelessRecipe) {
-                            List<Item> recipeItem = ((ShapelessRecipe) recipe).getIngredientList();
-                            for (Item need : recipeItem) {
-                                if (need.getId() == 0) {
-                                    continue;
-                                }
-                                Item needAdd = need.clone();
-                                //todo: check if there need to set item's count to 1, I'm too tired to check that today =w=
-                                needAdd.setCount(1);
-                                ingredientsList.add(needAdd);
-                            }
-                        }
-
-                        Item[] ingredients = ingredientsList.stream().toArray(Item[]::new);
-
-                        Item result = craftingEventPacket.output[0];
-
-                        if (!canCraft || !recipe.getResult().deepEquals(result)) {
-                            this.server.getLogger().debug("(2) Unmatched recipe " + recipe.getId() + " from player " + this.getName() + ": expected " + recipe.getResult() + ", got " + result + ", using: " + Arrays.asList(ingredients).toString());
-                            this.inventory.sendContents(this);
-                            break;
-                        }
-
-                        int[] used = new int[this.inventory.getSize()];
-
-                        for (Item ingredient : ingredients) {
-                            slot = -1;
-                            for (int index : this.inventory.getContents().keySet()) {
-                                Item i = this.inventory.getContents().get(index);
-                                if (ingredient.getId() != 0 && ingredient.deepEquals(i, ingredient.hasMeta()) && (i.getCount() - used[index]) >= 1) {
-                                    slot = index;
-                                    used[index]++;
-                                    break;
-                                }
-                            }
-
-                            if (ingredient.getId() != 0 && slot == -1) {
-                                canCraft = false;
-                                break;
-                            }
-                        }
-
-                        if (!canCraft) {
-                            this.server.getLogger().debug("(3) Unmatched recipe " + recipe.getId() + " from player " + this.getName() + ": client does not have enough items, using: " + Arrays.asList(ingredients).toString());
-                            this.inventory.sendContents(this);
-                            break;
-                        }
-                        CraftItemEvent craftItemEvent;
-                        this.server.getPluginManager().callEvent(craftItemEvent = new CraftItemEvent(this, ingredients, recipe));
-
-                        if (craftItemEvent.isCancelled()) {
-                            this.inventory.sendContents(this);
-                            break;
-                        }
-
-                        for (int i = 0; i < used.length; i++) {
-                            int count = used[i];
-                            if (count == 0) {
-                                continue;
-                            }
-
-                            item = this.inventory.getItem(i);
-
-                            Item newItem;
-                            if (item.getCount() > count) {
-                                newItem = item.clone();
-                                newItem.setCount(item.getCount() - count);
-                            } else {
-                                newItem = new ItemBlock(new BlockAir(), 0, 0);
-                            }
-
-                            this.inventory.setItem(i, newItem);
-                        }
-
-                        Item[] extraItem = this.inventory.addItem(recipe.getResult());
-                        if (extraItem.length > 0) {
-                            for (Item i : extraItem) {
-                                this.level.dropItem(this, i);
-                            }
-                        }*/
                     }
 
-                    if (recipe != null) {
-                        switch (recipe.getResult().getId()) {
-                            case Item.WORKBENCH:
-                                this.awardAchievement("buildWorkBench");
-                                break;
-                            case Item.WOODEN_PICKAXE:
-                                this.awardAchievement("buildPickaxe");
-                                break;
-                            case Item.FURNACE:
-                                this.awardAchievement("buildFurnace");
-                                break;
-                            case Item.WOODEN_HOE:
-                                this.awardAchievement("buildHoe");
-                                break;
-                            case Item.BREAD:
-                                this.awardAchievement("makeBread");
-                                break;
-                            case Item.CAKE:
-                                //TODO: detect complex recipes like cake that leave remains
-                                this.awardAchievement("bakeCake");
-                                this.inventory.addItem(new ItemBucket(0, 3));
-                                break;
-                            case Item.STONE_PICKAXE:
-                            case Item.GOLD_PICKAXE:
-                            case Item.IRON_PICKAXE:
-                            case Item.DIAMOND_PICKAXE:
-                                this.awardAchievement("buildBetterPickaxe");
-                                break;
-                            case Item.WOODEN_SWORD:
-                                this.awardAchievement("buildSword");
-                                break;
-                            case Item.DIAMOND:
-                                this.awardAchievement("diamond");
-                                break;
-                            default:
-                                break;
+                    Map<String, Item> serialized = new HashMap<>();
+
+                    for (Item ingredient : ingredientz) {
+                        String hash = ingredient.getId() + ":" + ingredient.getDamage();
+                        Item r = serialized.get(hash);
+
+                        if (r != null) {
+                            r.count += ingredient.getCount();
+                            continue;
                         }
+
+                        serialized.put(hash, ingredient);
+                    }
+
+                    for (Item ingredient : serialized.values()) {
+                        if (!this.craftingGrid.contains(ingredient)) {
+                            canCraft = false;
+                            break;
+                        }
+                    }
+
+                    if (!canCraft) {
+                        this.server.getLogger().debug("(1) Unmatched recipe " + craftingEventPacket.id + " from player " + this.getName() + "  not anough ingredients");
+                        return;
+                    }
+
+                    CraftItemEvent craftItemEvent = new CraftItemEvent(this, serialized.values().stream().toArray(Item[]::new), recipe);
+                    getServer().getPluginManager().callEvent(craftItemEvent);
+
+                    if (craftItemEvent.isCancelled()) {
+                        this.inventory.sendContents(this);
+                        break;
+                    }
+
+                    for (Item ingredient : serialized.values()) {
+                        this.craftingGrid.removeFromAll(ingredient);
+                    }
+
+                    this.inventory.addItem(recipe.getResult());
+
+                    switch (recipe.getResult().getId()) {
+                        case Item.WORKBENCH:
+                            this.awardAchievement("buildWorkBench");
+                            break;
+                        case Item.WOODEN_PICKAXE:
+                            this.awardAchievement("buildPickaxe");
+                            break;
+                        case Item.FURNACE:
+                            this.awardAchievement("buildFurnace");
+                            break;
+                        case Item.WOODEN_HOE:
+                            this.awardAchievement("buildHoe");
+                            break;
+                        case Item.BREAD:
+                            this.awardAchievement("makeBread");
+                            break;
+                        case Item.CAKE:
+                            //TODO: detect complex recipes like cake that leave remains
+                            this.awardAchievement("bakeCake");
+                            this.inventory.addItem(new ItemBucket(0, 3));
+                            break;
+                        case Item.STONE_PICKAXE:
+                        case Item.GOLD_PICKAXE:
+                        case Item.IRON_PICKAXE:
+                        case Item.DIAMOND_PICKAXE:
+                            this.awardAchievement("buildBetterPickaxe");
+                            break;
+                        case Item.WOODEN_SWORD:
+                            this.awardAchievement("buildSword");
+                            break;
+                        case Item.DIAMOND:
+                            this.awardAchievement("diamond");
+                            break;
+                        default:
+                            break;
                     }
 
                     break;
@@ -3122,12 +2816,16 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
                     InventoryTransactionPacket transactionPacket = (InventoryTransactionPacket) packet;
 
+                    boolean isCrafting = false;
                     List<InventoryAction> actions = new ArrayList<>();
                     for (NetworkInventoryAction networkInventoryAction : transactionPacket.actions) {
                         try {
                             InventoryAction a = networkInventoryAction.createInventoryAction(this);
-
                             if (a != null) {
+                                if (a instanceof SlotChangeAction) {
+                                    if (((SlotChangeAction) a).getInventory() instanceof CraftingGrid)
+                                        isCrafting = true;
+                                }
                                 actions.add(a);
                             }
                         } catch (Throwable e) {
@@ -3141,7 +2839,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                         case InventoryTransactionPacket.TYPE_NORMAL:
                             InventoryTransaction transaction = new SimpleInventoryTransaction(this, actions);
 
-                            if (!transaction.execute()) {
+                            if (!transaction.execute() && !isCrafting) {
                                 for (Inventory inventory : transaction.getInventories()) {
                                     inventory.sendContents(this);
                                     if (inventory instanceof PlayerInventory) {
@@ -3642,15 +3340,15 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         pk.type = SetTitlePacket.TYPE_RESET;
         this.dataPacket(pk);
     }
-    
-    public void setSubtitle(String subtitle){
-         SetTitlePacket pk = new SetTitlePacket();
-         pk.type = SetTitlePacket.TYPE_SUBTITLE;
-         pk.text = subtitle;
-         this.dataPacket(pk);
+
+    public void setSubtitle(String subtitle) {
+        SetTitlePacket pk = new SetTitlePacket();
+        pk.type = SetTitlePacket.TYPE_SUBTITLE;
+        pk.text = subtitle;
+        this.dataPacket(pk);
     }
-    
-    public void setTitleAnimationTimes(int fadein, int duration, int fadeout){
+
+    public void setTitleAnimationTimes(int fadein, int duration, int fadeout) {
         SetTitlePacket pk = new SetTitlePacket();
         pk.type = SetTitlePacket.TYPE_ANIMATION_TIMES;
         pk.fadeInTime = fadein;
@@ -4518,8 +4216,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
      * Creates and sends a BossBar to the player
      *
      * @param dummyBossBar DummyBossBar Object (Instantiate it by the Class Builder)
-     * @see DummyBossBar.Builder
      * @return bossBarId  The BossBar ID, you should store it if you want to remove or update the BossBar later
+     * @see DummyBossBar.Builder
      */
     public long createBossBar(DummyBossBar dummyBossBar) {
         this.dummyBossBars.put(dummyBossBar.getBossBarId(), dummyBossBar);
@@ -4529,6 +4227,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     /**
      * Get a DummyBossBar object
+     *
      * @param bossBarId The BossBar ID
      * @return DummyBossBar object
      * @see DummyBossBar#setText(String) Set BossBar text
@@ -4541,6 +4240,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     /**
      * Get all DummyBossBar objects
+     *
      * @return DummyBossBars Map
      */
     public Map<Long, DummyBossBar> getDummyBossBars() {
