@@ -350,6 +350,23 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         return this.getAdventureSettings().get(Type.ALLOW_FLIGHT);
     }
 
+    public void setAllowModifyWorld(boolean value) {
+        this.getAdventureSettings().set(Type.WORLD_IMMUTABLE, !value);
+        this.getAdventureSettings().set(Type.BUILD_AND_MINE, value);
+        this.getAdventureSettings().update();
+    }
+
+    public void setAllowInteract(boolean value) {
+        setAllowInteract(value, value);
+    }
+
+    public void setAllowInteract(boolean value, boolean containers) {
+        this.getAdventureSettings().set(Type.WORLD_IMMUTABLE, !value);
+        this.getAdventureSettings().set(Type.DOORS_AND_SWITCHED, value);
+        this.getAdventureSettings().set(Type.OPEN_CONTAINERS, containers);
+        this.getAdventureSettings().update();
+    }
+
     @Deprecated
     public void setAutoJump(boolean value) {
         this.getAdventureSettings().set(Type.AUTO_JUMP, value);
@@ -920,7 +937,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
         int centerX = (int) this.x >> 4;
         int centerZ = (int) this.z >> 4;
-        int count = 0;
 
         for (int x = -this.chunkRadius; x <= this.chunkRadius; x++) {
             for (int z = -this.chunkRadius; z <= this.chunkRadius; z++) {
@@ -931,7 +947,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                     long index;
                     if (!(this.usedChunks.containsKey(index = Level.chunkHash(chunkX, chunkZ))) || !this.usedChunks.get(index)) {
                         newOrder.put(index, distance);
-                        count++;
                     }
                     lastChunk.remove(index);
                 }
@@ -1376,6 +1391,9 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             double dz = newPos.z - this.z;
 
             this.fastMove(dx, dy, dz);
+            if (this.newPosition == null) {
+                return; //maybe solve that in better way
+            }
 
             double diffX = this.x - newPos.x;
             double diffY = this.y - newPos.y;
@@ -2745,7 +2763,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 case ProtocolInfo.REQUEST_CHUNK_RADIUS_PACKET:
                     RequestChunkRadiusPacket requestChunkRadiusPacket = (RequestChunkRadiusPacket) packet;
                     ChunkRadiusUpdatedPacket chunkRadiusUpdatePacket = new ChunkRadiusUpdatedPacket();
-                    this.chunkRadius = Math.max(5, Math.min(requestChunkRadiusPacket.radius, this.viewDistance));
+                    this.chunkRadius = Math.max(3, Math.min(requestChunkRadiusPacket.radius, this.viewDistance));
                     chunkRadiusUpdatePacket.radius = this.chunkRadius;
                     this.dataPacket(chunkRadiusUpdatePacket);
                     break;
@@ -3283,6 +3301,19 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
 
         return false;
+    }
+
+    public void setViewDistance(int distance) {
+        this.chunkRadius = distance;
+
+        ChunkRadiusUpdatedPacket pk = new ChunkRadiusUpdatedPacket();
+        pk.radius = distance;
+
+        this.dataPacket(pk);
+    }
+
+    public int getViewDistance() {
+        return this.chunkRadius;
     }
 
     @Override
@@ -4023,20 +4054,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                 }
             }
 
-            /*if (this.isLevelChange) { //TODO: remove this
-                PlayStatusPacket statusPacket0 = new PlayStatusPacket();//Weather
-                this.getLevel().sendWeather(this);
-                //Update time
-                this.getLevel().sendTime(this);
-                statusPacket0.status = PlayStatusPacket.PLAYER_SPAWN;
-                this.dataPacket(statusPacket0);
-
-                //Weather
-                this.getLevel().sendWeather(this);
-                //Update time
-                this.getLevel().sendTime(this);
-            }*/
-
             this.spawnToAll();
             this.isLevelChange = false;
             this.forceMovement = this.teleportPosition;
@@ -4108,38 +4125,6 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
             this.getLevel().sendWeather(this);
             //Update time
             this.getLevel().sendTime(this);
-
-            if (from.getLevel().getId() != to.level.getId()) {
-                /*if (this.spawned) { //broken
-                    //TODO: remove this in future version
-                    this.isLevelChange = true;
-                    this.nextChunkOrderRun = 10000;
-
-                    ChangeDimensionPacket changeDimensionPacket1 = new ChangeDimensionPacket();
-                    changeDimensionPacket1.dimension = 1;
-                    changeDimensionPacket1.x = (float) this.getX();
-                    changeDimensionPacket1.y = (float) this.getY();
-                    changeDimensionPacket1.z = (float) this.getZ();
-                    this.dataPacket(changeDimensionPacket1);
-
-                    this.forceSendEmptyChunks();
-                    this.getServer().getScheduler().scheduleDelayedTask(() -> {
-                        PlayStatusPacket statusPacket0 = new PlayStatusPacket();
-                        statusPacket0.status = PlayStatusPacket.PLAYER_SPAWN;
-                        dataPacket(statusPacket0);
-                    }, 8);
-
-                    this.getServer().getScheduler().scheduleDelayedTask(() -> {
-                        ChangeDimensionPacket changeDimensionPacket = new ChangeDimensionPacket();
-                        changeDimensionPacket.dimension = 0;
-                        changeDimensionPacket.x = (float) this.getX();
-                        changeDimensionPacket.y = (float) this.getY();
-                        changeDimensionPacket.z = (float) this.getZ();
-                        dataPacket(changeDimensionPacket);
-                        nextChunkOrderRun = 0;
-                    }, 9);
-                }*/
-            }
             return true;
         }
 
