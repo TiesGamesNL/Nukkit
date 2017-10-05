@@ -2522,8 +2522,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
                                 break;
                             }
 
-                            this.dataPacket(packet);
-                            Server.broadcastPacket(this.getViewers().values(), packet);
+                            /*this.dataPacket(packet); //bug?
+                            Server.broadcastPacket(this.getViewers().values(), packet);*/
                             break;
                     }
                     break;
@@ -3792,7 +3792,8 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
         }
 
         super.setHealth(health);
-        Attribute attr = Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(this.getMaxHealth()).setValue(health > 0 ? (health < getMaxHealth() ? health : getMaxHealth()) : 0);
+        //TODO: Remove it in future! This a hack to solve the client-side absorption bug! WFT Mojang (Half a yellow heart cannot be shown, we can test it in local gaming)
+        Attribute attr = Attribute.getAttribute(Attribute.MAX_HEALTH).setMaxValue(this.getAbsorption() % 2 != 0 ? this.getMaxHealth() + 1 : this.getMaxHealth()).setValue(health > 0 ? (health < getMaxHealth() ? health : getMaxHealth()) : 0);
         if (this.spawned) {
             UpdateAttributesPacket pk = new UpdateAttributesPacket();
             pk.entries = new Attribute[]{attr};
@@ -4538,7 +4539,7 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
     }
 
     public boolean pickupEntity(Entity entity, boolean near) {
-        if (!this.spawned || !this.isAlive() || !this.isOnline()) {
+        if (!this.spawned || !this.isAlive() || !this.isOnline() || this.getGamemode() == SPECTATOR) {
             return false;
         }
 
@@ -4656,5 +4657,15 @@ public class Player extends EntityHuman implements CommandSender, InventoryHolde
 
     public boolean isBreakingBlock() {
         return this.breakingBlock != null;
+    }
+
+    /**
+     * Show a window of a XBOX account's profile
+     * @param xuid XUID
+     */
+    public void showXboxProfile(String xuid) {
+        ShowProfilePacket pk = new ShowProfilePacket();
+        pk.xuid = getLoginChainData().getXUID();
+        this.dataPacket(pk);
     }
 }
